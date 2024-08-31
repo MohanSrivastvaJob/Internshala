@@ -1,0 +1,333 @@
+create table IPL_Ball (
+id int,
+inning int,
+over int,
+ball int,
+batsman varchar(100),
+non_striker varchar(100),
+bowler varchar(100),
+batsman_runs int,
+extra_runs int,
+total_runs int,
+is_wicket int,
+dismissal_kind varchar(100),
+player_dismissed varchar(100),
+fielder varchar(100),
+extras_type varchar(100),
+batting_team varchar(100),
+bowling_team varchar(100)
+);
+
+copy IPL_Ball from 'C:\Program Files\PostgreSQL\16\data\IPL_Dataset\IPL_Ball.csv' delimiter ',' csv header;
+
+
+create table IPL_matches (
+id int,
+city varchar(100),
+date date,
+player_of_match varchar(100),
+venue varchar(100),
+neutral_venue int,
+team1 varchar(100),
+team2 varchar(100),
+toss_winner varchar(100),
+toss_decision varchar(100),
+winner varchar(100),
+result varchar(100),
+result_margin int,
+eliminator varchar(100),
+method varchar(100),
+umpire1 varchar(100),
+umpire2 varchar(100)
+);
+
+copy IPL_matches from 'C:\Program Files\PostgreSQL\16\data\IPL_Dataset\IPL_matches.csv' delimiter ',' csv header;
+
+
+
+select * from IPL_Ball;
+select * from IPL_matches;
+
+/*
+Q1:
+
+Your first priority is to get 2-3 players with high S.R who have faced at least 500 balls.
+And to do that you have to make a list of 10 players you want to bid in the auction so 
+that when you try to grab them in auction you should not pay the amount greater than you 
+have in the purse for a particular player.
+*/
+select batsman,
+sum(batsman_runs) as total_runs,count(ball) as total_faced_balls, 
+round(((sum(total_runs) * 1.0)/ count(ball))*100,2) as S_R from IPL_Ball
+group by batsman
+having count(ball) > 500
+order by s_r desc
+limit 10;
+
+
+
+/*
+Q2:
+Now you need to get 2-3 players with good Average who have played more the 2 ipl seasons.
+And to do that you have to make a list of 10 players you want to bid in the auction so 
+that when you try to grab them in auction you should not pay the amount greater than you have 
+in the purse for a particular player.
+*/
+select a.batsman, 
+count(distinct extract(Year from b.date))  as season,
+(case when sum(a.is_wicket)!=0 then (sum(a.batsman_runs)/sum(a.is_wicket))*1.0 else 0 end )as average
+from IPL_Ball as a
+inner join IPL_matches as b
+on a.id = b.id
+group by a.batsman
+having count(distinct extract(Year from b.date)) >2
+order by average desc
+limit 10;
+
+
+
+/*
+Q3
+
+Now you need to get 2-3 Hard-hitting players who have scored most runs in boundaries and 
+have played more the 2 ipl season. To do that you have to make a list of 10 players 
+you want to bid in the auction so that when you try to grab them in auction you 
+should not pay the amount greater than you have in the purse for a particular player.
+*/
+select a.batsman, count(distinct extract(Year from b.date))  as season,
+sum(batsman_runs) as total_runs,
+sum(case when batsman_runs=4 then batsman_runs else 0 end) as total_4_runs,
+sum(case when batsman_runs=6 then batsman_runs else 0 end) as total_6_runs,
+(sum(case when batsman_runs=4 or  batsman_runs=6 then batsman_runs else 0 end)*100)/sum(batsman_runs) as percentage_boundaries
+from IPL_Ball as a
+inner join IPL_matches as b
+on a.id = b.id
+group by a.batsman
+having count(distinct extract(Year from b.date)) >2
+order by percentage_boundaries desc
+limit 10;
+
+
+
+/*
+Q4:
+
+Your first priority is to get 2-3 bowlers with good economy who have bowled at least 500 balls 
+in IPL so far.To do that you have to make a list of 10 players you want to bid in the auction 
+so that when you try to grab them in auction you should not pay the amount greater than 
+you have in the purse for a particular player.
+*/
+select bowler as bowler_name ,
+round(sum(total_runs)*1.0/(count(bowler)/6),2) as good_economy
+from IPL_Ball
+group by bowler_name
+having count(bowler) > 500
+order by good_economy 
+limit 10;
+
+
+
+/*
+Q5:
+
+Now you need to get 2-3 bowlers with the best strike rate and who have bowled at least 500 balls 
+in IPL so far.To do that you have to make a list of 10 players you want to bid in the auction 
+so that when you try to grab them in auction you should not pay the amount greater than 
+you have in the purse for a particular player.
+*/
+select bowler as bowler_name,
+count(ball) as total_balls_delevered,
+sum(is_wicket) as total_wicket_get,
+round(case when sum(is_wicket)=0 then 0 else (count(ball)*1.0)/sum(is_wicket) end,2) as balling_strike_rate 
+from IPL_Ball 
+group by bowler 
+having count(ball) >= 500
+order by balling_strike_rate 
+limit 10;
+
+
+
+/*
+Q6:
+
+Now you need to get 2-3 All_rounders with the best batting as well as bowling strike rate 
+and who have faced at least 500 balls in IPL so far and have bowled minimum 300 balls.
+To do that you have to make a list of 10 players you want to bid in the auction so that 
+when you try to grab them in auction you should not pay the amount greater than you have 
+in the purse for a particular player.
+*/
+
+select bating.player_name, 
+bating.total_balls_faced, bolling.total_balls_delevered, 
+bating.total_batting_runs, bolling.total_bowling_runs, 
+bating.batting_strike_rate, bolling.bowling_strike_rate 
+from 
+(SELECT batsman as player_name,
+ count(ball) as total_balls_faced, 
+ sum(batsman_runs) as total_batting_runs,
+round((sum(total_runs)*1.0/count(ball)) *100,2) as batting_strike_rate
+from IPL_Ball 
+ group by batsman
+ having count(ball) > 500) as bating
+ 
+inner join 
+
+(select bowler as bowler_name,
+ count(ball) as total_balls_delevered,
+ sum(total_runs) as total_bowling_runs,
+ case when sum(is_wicket)=0 then 0 else round((count(ball)*1.0)/sum(is_wicket),2) end as bowling_strike_rate 
+from IPL_Ball group by bowler having count(ball) > 300) as bolling
+on bating.player_name=bolling.bowler_name
+order by batting_strike_rate desc, bowling_strike_rate desc 
+limit 10
+;
+
+
+
+
+
+
+/*
+Additional Questions for Final Assessment
+
+NOTE:-Deliveries is the table created using the IPL_Ball data 
+whereas the Matches table has been created using the IPL_Matches data.
+
+*/
+create table Deliveries as 
+(
+	select * from IPL_Ball
+);
+
+select * from Deliveries;
+
+
+
+create table Matches as 
+(
+	select * from IPL_Matches
+);
+
+select * from Matches;
+
+
+/*
+1. Get the count of cities that have hosted an IPL match.
+*/
+select count(distinct(city)) as hosted_cities_count from Matches;
+
+
+
+/*
+2. Create table deliveries_v02 with all the columns of the table ‘deliveries’ and
+an additional column ball_result containing values boundary, 
+dot or other depending on the total_run 
+(boundary for >= 4, dot for 0 and other for any other number)
+
+(Hint 1 : CASE WHEN statement is used to get condition based results)
+(Hint 2: To convert the output data of the select statement into a table, 
+  you can use a subquery. Create table table_name as [entire select statement]).
+*/
+Create table deliveries_v02 as 
+(
+	select *, 
+	(case when total_runs >= 4 then 'boundary' 
+	else (case when total_runs = 0 then 'dot' else 'other' end)
+	end) as ball_result from Deliveries
+);
+
+
+
+/*
+3. Write a query to fetch the total number of boundaries and dot balls from 
+the deliveries_v02 table.
+*/
+select 
+sum(case when ball_result = 'boundary' then 1 else 0 end) as count_of_boundary,
+sum(case when ball_result = 'dot' then 1 else 0 end) as count_of_dot
+from deliveries_v02;
+
+
+
+/*
+4. Write a query to fetch the total number of boundaries scored by each team 
+from the deliveries_v02 table and order it in descending order of the 
+number of boundaries scored.
+*/
+select batting_team , 
+sum(case when ball_result = 'boundary' then 1 else 0 end) as count_of_boundary
+from deliveries_v02
+group by batting_team
+order by count_of_boundary desc;
+
+
+
+
+/*
+5. Write a query to fetch the total number of dot balls bowled by each team 
+and order it in descending order of the total number of dot balls bowled.
+*/
+select bowling_team, 
+sum(case when ball_result = 'dot' then 1 else 0 end) as count_of_dot
+from deliveries_v02
+group by bowling_team
+order by count_of_dot desc;
+
+
+
+/*
+6. Write a query to fetch the total number of dismissals by dismissal kinds 
+where dismissal kind is not NA.
+*/
+select sum(case when dismissal_kind != 'NA' then 1 else 0 end) as count_not_dismissal
+from deliveries_v02
+
+
+
+/*
+7. Write a query to get the top 5 bowlers who conceded maximum extra runs from 
+the deliveries table.
+*/
+select bowler, sum(extra_runs) as total_extra_runs
+from deliveries
+group by  bowler
+order by total_extra_runs desc
+limit 5;
+
+
+
+/*
+8. Write a query to create a table named deliveries_v03 with all the columns of 
+deliveries_v02 table and two additional column (named venue and match_date) of 
+venue and date from table matches.
+*/
+create table deliveries_v03 as
+(
+	select a.*, b.venue as venue , b.date as match_date from deliveries_v02 as a
+	left join matches as b
+	on a.id = b.id
+);
+
+
+
+/*
+9. Write a query to fetch the total runs scored for each venue and order it 
+in the descending order of total runs scored.
+*/
+select venue, sum(total_runs) as total_runs from deliveries_v03
+group by venue
+order by total_runs desc;
+
+
+
+/*
+Write a query to fetch the year-wise total runs scored at Eden Gardens 
+and order it in the descending order of total runs scored.
+*/
+select extract(year from match_date) as match_year, sum(total_runs) as total_runs 
+from deliveries_v03
+where venue = 'Eden Gardens'
+group by match_year
+order by total_runs desc
+
+
